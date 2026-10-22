@@ -274,6 +274,12 @@ pub trait Props: Clone + PartialEq + 'static {
     #[doc(hidden)]
     const LAZY_CHILDREN: bool = false;
 
+    /// TS declares the props generic over `T`, the type of the rows a prop
+    /// takes (`#[props(generic)]`; a prop's type names it, as
+    /// [`super::Rows`] does).
+    #[doc(hidden)]
+    const GENERIC: bool = false;
+
     /// The props (their named types declared in `types`).
     fn spec(types: &mut TsTypes) -> Vec<PropSpec>;
 
@@ -395,6 +401,9 @@ pub struct ComponentSpec {
     /// (`#[prop(lazy)]` on its `Children`): the core tells it with a
     /// `$children` event on the host.
     pub lazy_children: bool,
+    /// Its props are generic over `T`, the type of the rows one takes
+    /// (`#[props(generic)]`), as a component with [`super::Items`] is.
+    pub generic: bool,
 }
 
 impl ComponentSpec {
@@ -413,6 +422,7 @@ impl ComponentSpec {
             methods,
             types,
             lazy_children: C::Props::LAZY_CHILDREN,
+            generic: C::Props::GENERIC,
         }
     }
 
@@ -655,6 +665,9 @@ pub struct Registry {
     assets: Arc<Vec<&'static [super::AssetFile]>>,
     /// Makes the design tokens of a theme ([`Registry::tokens_from`]).
     tokens: Option<super::TokenSource>,
+    /// The UI sets served under paths of this one's specifier
+    /// ([`Registry::submodule`]).
+    submodules: Arc<Vec<Registry>>,
 }
 
 impl fmt::Debug for Registry {
@@ -665,9 +678,6 @@ impl fmt::Debug for Registry {
 
 impl Registry {
     /// An empty registry.
-    /// The UI sets served under paths of this one's specifier
-    /// ([`Registry::submodule`]).
-    submodules: Arc<Vec<Registry>>,
     pub fn new() -> Self {
         Self::default()
     }
@@ -866,16 +876,6 @@ impl Registry {
         }
     }
 
-    /// The JS module the registry is imported as: a UI set's, or the
-    /// runtime module's (`None`: a Rust app's components).
-    pub fn specifier(&self) -> Option<&'static str> {
-        self.ui_set.or(self.namespace)
-    }
-
-    /// The runtime values and types exported as they are
-    /// ([`Registry::reexport`]).
-    pub fn reexports(&self) -> (&[&'static str], &[&'static str]) {
-        (&self.reexports.0, &self.reexports.1)
     /// Serves UI set `set` wherever this one is served, as a module of
     /// its own under a path of this set's specifier (`nsh/base/plot` of
     /// `nsh/base`, as `gpui-base`'s `plot` is a module of the crate): a
@@ -915,6 +915,16 @@ impl Registry {
         out
     }
 
+    /// The JS module the registry is imported as: a UI set's, or the
+    /// runtime module's (`None`: a Rust app's components).
+    pub fn specifier(&self) -> Option<&'static str> {
+        self.ui_set.or(self.namespace)
+    }
+
+    /// The runtime values and types exported as they are
+    /// ([`Registry::reexport`]).
+    pub fn reexports(&self) -> (&[&'static str], &[&'static str]) {
+        (&self.reexports.0, &self.reexports.1)
     }
 
     /// Exports `values` `nsh-js` makes for the set (`NavStack`, `NavPage`),
@@ -1207,6 +1217,7 @@ pub fn declarations(registry: &Registry, omit: &[&str]) -> String {
         // A component with rows is generic over their type, like `List`.
         let (generic, extends) = match spec.items() {
             Some(_) => ("<T>", ", ListItemsProps<T>"),
+            None if spec.generic => ("<T>", ""),
             None => ("", ""),
         };
         // A component with methods: its ref is an object of them.
