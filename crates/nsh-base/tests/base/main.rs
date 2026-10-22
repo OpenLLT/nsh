@@ -2,5 +2,6 @@
 //! what a user does with them and what the app hears and shows.
 
 mod dock;
+mod plot;
 mod resizable;
 mod sheet;

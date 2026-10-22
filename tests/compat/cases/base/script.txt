@@ -1009,7 +1009,34 @@ covers [props] Progress.trackStyle
 covers [props] Progress.indicatorClass
 covers [props] Progress.indicatorStyle
 
-# The app's design tokens: shadcn's `neutral` with the app's theme over it.
+tap id:case-base-plot
+# One image for screen readers, with the app's label, at the app's size.
+expect hovered null
+prop id:plot role image
+prop id:plot accessibilityLabel Price
+frame id:plot 0 20 200 100
+# The rows' x on a linear scale of 0 to 40: at 0, 50 and 100 points. The
+# row nearest the pointer, reported when it changes, none once it leaves.
+event id:plot onHoverMove position.x=45 position.y=10
+expect hovered 1
+event id:plot onHoverMove position.x=90 position.y=10
+expect hovered 2
+event id:plot onHoverOut
+expect hovered null
+# New rows: the plot reads them again.
+tap id:more
+expect rows 4
+event id:plot onHoverMove position.x=60 position.y=10
+expect hovered 1
+covers [nsh/base/plot] Plot
+covers [nsh/base/plot] Line
+covers [nsh/base/plot] Area
+covers [nsh/base/plot] Grid
+covers [props] Plot.data
+covers [props] Plot.x
+covers [props] Plot.xScale
+covers [events] Plot.onHoverChange
+
 tap id:case-base-token
 expect token up #138a5aff
 expect token primary #171717ff

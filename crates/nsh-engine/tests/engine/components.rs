@@ -45,19 +45,20 @@ fn start_with(
         std::fs::write(dir.join("nsh.json"), config).unwrap();
     }
     let ui_sets = vec![nsh_base::registry(), crate::test_ui::registry()];
+    // `nsh/base` with its submodules (`nsh/base/plot`).
+    let described: Vec<nsh_core::ui::description::SetDescription> = ui_sets
+        .iter()
+        .flat_map(nsh_core::ui::Registry::sets)
+        .map(Into::into)
+        .collect();
     let bundle = nsh_bundler::bundle(&nsh_bundler::BundleOptions {
         entry,
         minify: false,
         split: false,
-        ui_sets: ui_sets.iter().map(Into::into).collect(),
+        ui_sets: described.clone(),
     })
     .unwrap();
-    let bytecode = nsh_js::compile_bytecode_with(
-        &bundle.code,
-        false,
-        &ui_sets.iter().map(Into::into).collect::<Vec<_>>(),
-    )
-    .unwrap();
+    let bytecode = nsh_js::compile_bytecode_with(&bundle.code, false, &described).unwrap();
     let (tx, rx) = crossbeam_channel::unbounded();
     let config = EngineConfig {
         // SAFETY: compiled just now by this runtime.
@@ -2556,4 +2557,211 @@ fn a_base_progress_shows_the_apps_value_in_its_indicator() {
     });
     assert_eq!(value(&after), Some(range(None)));
     assert_eq!(width(&after), Some(50.0));
+}
+const BASE_PLOT: &str = r##"import { mount, signal, Text, View } from "nsh";
+import { Area, Grid, Line, Plot } from "nsh/base/plot";
+
+type Row = { t: number; price: number; avg?: number; name: string };
+
+function App() {
+  const rows = signal<Row[]>([
+    { t: 0, price: 10, avg: 15, name: "a" },
+    { t: 1, price: 20, avg: 15, name: "b" },
+    { t: 2, price: 30, name: "c" },
+  ]);
+  const hovered = signal<number | null>(null);
+  return (
+    <View>
+      <Plot
+        testID="plot"
+        data={rows()}
+        y="price"
+        yScale={{ type: "linear", domain: [0, 40] }}
+        accessibilityLabel="Price"
+        class="w-[200px] h-[100px] stroke-[#ff0000]"
+        style={{ color: "#0000ff" }}
+        onHoverChange={(index) => hovered.set(index)}
+      >
+        <Grid y={[0, 20, 40]} class="stroke-[#00ff00]" style={{ strokeDasharray: "2 2" }} />
+        <Area class="fill-[#0000ff]/50" curve="linear" />
+        <Line curve="linear" class="stroke-2" />
+        <Line y="avg" curve="stepAfter" class="stroke-current" />
+      </Plot>
+      <Text>{`hover ${hovered()}`}</Text>
+      <View testID="more" onPress={() => rows.set([...rows(), { t: 3, price: 40, name: "d" }])} />
+    </View>
+  );
+}
+
+mount(App);
+"##;
+
+/// `nsh/base/plot`: a `Plot` of rows with its marks, each a canvas drawn
+/// natively from the rows' fields by the plot's scales, painting with the
+/// paint properties it inherits (`stroke-*` on the plot, `fill-*` and
+/// `strokeDasharray` on a mark, `currentColor` where none is set); one
+/// element for screen readers; the row nearest the pointer reported when
+/// it changes; new rows drawn again in one batch.
+#[test]
+fn a_base_plot_draws_its_marks_from_the_rows() {
+    use nsh_core::{
+        AccessibilityRole, Color, HoverEvent,
+        canvas::{CanvasOp, Num, Paint, PathOp},
+    };
+    let (engine, rx) = start(BASE_PLOT);
+    // The marks draw once the plot has its size.
+    let drawings = |batches: &[MountBatch]| {
+        batches
+            .iter()
+            .flat_map(|b| b.items.iter())
+            .filter_map(|i| match i {
+                MountItem::Canvas { id, drawing } => Some((*id, drawing.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let points = |ops: &[CanvasOp]| {
+        ops.iter()
+            .filter_map(|op| match op {
+                CanvasOp::Path(PathOp::MoveTo(Num::Const(x), Num::Const(y)))
+                | CanvasOp::Path(PathOp::LineTo(Num::Const(x), Num::Const(y))) => Some((*x, *y)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut batches = Vec::new();
+    while let Ok(batch) = rx.recv_timeout(Duration::from_millis(500)) {
+        let done = drawings(std::slice::from_ref(&batch))
+            .iter()
+            .any(|(_, d)| points(&d.ops).len() > 3);
+        batches.push(batch);
+        if done {
+            break;
+        }
+    }
+    assert!(shows(&batches[0], "hover null"));
+    // The latest drawing of each canvas, in the order they were made.
+    let mut latest: Vec<(u32, std::sync::Arc<nsh_core::canvas::Drawing>)> = Vec::new();
+    for (id, d) in drawings(&batches) {
+        match latest.iter_mut().find(|(i, _)| *i == id) {
+            Some(entry) => entry.1 = d,
+            None => latest.push((id, d)),
+        }
+    }
+    // By node id: JS made the marks in order.
+    latest.sort_by_key(|(id, _)| *id);
+    let [(_, grid), (_, area), (line, price), (_, avg)] = &latest[..] else {
+        panic!("four marks: {latest:?}")
+    };
+    let (red, blue, green) = (Color(0xff00_00ff), Color(0x0000_ffff), Color(0x00ff_00ff));
+    // The grid: its own stroke and dashes, a line across at each value
+    // (on the middle of a pixel row), 40 at the top.
+    assert_eq!(grid.ops[0], CanvasOp::StrokeStyle(Paint::Color(green)));
+    assert_eq!(grid.ops[2], CanvasOp::LineDash([px(2.0), px(2.0)].into()));
+    assert_eq!(
+        points(&grid.ops),
+        [
+            (0.0, 100.5),
+            (200.0, 100.5),
+            (0.0, 50.5),
+            (200.0, 50.5),
+            (0.0, 0.5),
+            (200.0, 0.5)
+        ]
+    );
+    // The area: its fill, the price line and down to the bottom edge.
+    assert_eq!(
+        area.ops[0],
+        CanvasOp::FillStyle(Paint::Color(Color(0x0000_ff80)))
+    );
+    assert_eq!(
+        &points(&area.ops)[..5],
+        [
+            (0.0, 75.0),
+            (100.0, 50.0),
+            (200.0, 25.0),
+            (200.0, 100.0),
+            (0.0, 100.0)
+        ]
+    );
+    // The lines: the plot's stroke inherited, its own width; the second
+    // the plot's text color (`stroke-current`), steps through the rows
+    // with an `avg`.
+    assert_eq!(price.ops[0], CanvasOp::StrokeStyle(Paint::Color(red)));
+    assert_eq!(price.ops[1], CanvasOp::LineWidth(Num::Const(2.0)));
+    assert_eq!(
+        points(&price.ops),
+        [(0.0, 75.0), (100.0, 50.0), (200.0, 25.0)]
+    );
+    assert_eq!(avg.ops[0], CanvasOp::StrokeStyle(Paint::Color(blue)));
+    assert_eq!(
+        points(&avg.ops),
+        [(0.0, 62.5), (100.0, 62.5), (100.0, 62.5)]
+    );
+    // The area's top edge: the plot's stroke, inherited as CSS does.
+    assert!(area.ops.contains(&CanvasOp::StrokeStyle(Paint::Color(red))));
+
+    // One element for screen readers: the image, with the app's label.
+    let plot = batches
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .find_map(|i| match i {
+            MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some("plot") => {
+                Some((*id, props.clone()))
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(plot.1.accessibility.role, AccessibilityRole::Image);
+    assert_eq!(plot.1.accessibility.accessible, Some(true));
+    assert_eq!(plot.1.accessibility.label.as_deref(), Some("Price"));
+
+    // The pointer: the nearest row, once per change, none once it leaves.
+    let hover = |x: f32| {
+        engine.control().dispatch_event(
+            plot.0,
+            EventKind::HoverMove,
+            EventPayload::Hover(HoverEvent {
+                position: nsh_core::geometry::point(px(x), px(10.0)),
+                ..Default::default()
+            }),
+        )
+    };
+    hover(90.0);
+    until(&rx, |b| shows(b, "hover 1"));
+    hover(160.0);
+    until(&rx, |b| shows(b, "hover 2"));
+    engine
+        .control()
+        .dispatch_event(plot.0, EventKind::HoverOut, EventPayload::None);
+    until(&rx, |b| shows(b, "hover null"));
+
+    // New rows: the marks drawn again, in one batch, nothing for the grid
+    // whose lines stay.
+    let more = batches
+        .iter()
+        .flat_map(|b| b.items.iter())
+        .find_map(|i| match i {
+            MountItem::ViewProps { id, props } if props.test_id.as_deref() == Some("more") => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    engine
+        .control()
+        .dispatch_event(more, EventKind::Press, EventPayload::None);
+    let after = until(&rx, |b| !drawings(std::slice::from_ref(b)).is_empty());
+    let redrawn = drawings(&after[after.len() - 1..]);
+    assert_eq!(redrawn.len(), 3, "the area and the lines: {redrawn:?}");
+    let (_, price) = redrawn.iter().find(|(id, _)| id == line).unwrap();
+    assert_eq!(
+        points(&price.ops),
+        [
+            (0.0, 75.0),
+            (66.666664, 50.0),
+            (133.33333, 25.0),
+            (200.0, 0.0)
+        ]
+    );
 }
