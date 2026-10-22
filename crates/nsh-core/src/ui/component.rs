@@ -665,6 +665,9 @@ impl fmt::Debug for Registry {
 
 impl Registry {
     /// An empty registry.
+    /// The UI sets served under paths of this one's specifier
+    /// ([`Registry::submodule`]).
+    submodules: Arc<Vec<Registry>>,
     pub fn new() -> Self {
         Self::default()
     }
@@ -841,7 +844,7 @@ impl Registry {
     #[track_caller]
     pub fn merged(sets: &[Registry]) -> Self {
         let mut out = Self::default();
-        for set in sets {
+        for set in sets.iter().flat_map(Registry::sets) {
             out.tokens = out.tokens.or(set.tokens);
             let types = Arc::make_mut(&mut out.types);
             for (name, ty) in set.types.iter() {
@@ -873,6 +876,45 @@ impl Registry {
     /// ([`Registry::reexport`]).
     pub fn reexports(&self) -> (&[&'static str], &[&'static str]) {
         (&self.reexports.0, &self.reexports.1)
+    /// Serves UI set `set` wherever this one is served, as a module of
+    /// its own under a path of this set's specifier (`nsh/base/plot` of
+    /// `nsh/base`, as `gpui-base`'s `plot` is a module of the crate): a
+    /// family of components whose names (`Line`, `Grid`) only make sense
+    /// together, apart from the set's other exports. Hosts, the toolchain
+    /// and the declarations take the set's submodules with it
+    /// ([`Registry::sets`]), so a list of UI sets names only the set.
+    ///
+    /// # Panics
+    ///
+    /// When `set`'s specifier is not a path under this set's.
+    #[track_caller]
+    pub fn submodule(&mut self, set: Registry) -> &mut Self {
+        let under = match (self.ui_set, set.ui_set) {
+            (Some(parent), Some(child)) => child
+                .strip_prefix(parent)
+                .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/')),
+            _ => false,
+        };
+        assert!(
+            under,
+            "a submodule is a UI set under a path of its set's specifier: {:?} under {:?}",
+            set.ui_set, self.ui_set
+        );
+        Arc::make_mut(&mut self.submodules).push(set);
+        self
+    }
+
+    /// This set and its submodules ([`Registry::submodule`]), each one
+    /// module apps import: what a host serves and the toolchain declares
+    /// for it.
+    pub fn sets(&self) -> Vec<&Registry> {
+        let mut out = vec![self];
+        for sub in self.submodules.iter() {
+            out.extend(sub.sets());
+        }
+        out
+    }
+
     }
 
     /// Exports `values` `nsh-js` makes for the set (`NavStack`, `NavPage`),
