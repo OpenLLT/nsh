@@ -44,30 +44,39 @@ frame at the 95th percentile: under 8.3 ms, a frame fits a 120 Hz refresh.
 
 ### Every page
 
-NSH draws a frame only when something on screen changes, so FPS is the rate of change: a page at rest draws none,
-an animation draws one per refresh, and a scroll draws one per scroll event the test sends. *Over 8.3 ms* is the share
-of frames that missed a 120 Hz refresh; at 0% every change reached the screen in the next refresh.
+Every page of the gallery, as it opens and while the test scrolls it, in a 1200 × 800 window on a 144 Hz display (the
+same machine). NSH draws a frame only when something on screen changes, so *FPS* here is the rate while something
+moves: one frame per median gap between drawn frames (`perf.py`'s `moving`); at the display's 144, every frame of an
+animation or a scroll comes one refresh after the last. *Over one refresh* is the share of frames that took longer
+than a refresh (6.9 ms). Images' GIF and WebP play at their own frame rates (about 50 FPS here), as does video.
 
 <div class="data-table">
 
-| Page | Frames come from | FPS | Frame p95 | Over 8.3 ms | CPU |
+| Page | Frames come from | FPS | Frame p95 | Over one refresh | CPU |
 |---|---|---|---|---|---|
-| Stocks | Live data, native loops | 118–120 | 4.2–4.9 ms | 0% | 28–33% |
-| Stocks, scrolling | Live data, native loops | 119 | 5.8–6.8 ms | 1–2% | 32% |
-| Gestures | Springs, a pulsing ring | 120 | 4.4–4.5 ms | 0–1% | 10% |
-| Animations | Native loops | 120 | 2.0 ms | 0% | 13% |
-| Canvas | Native loops | 120 | 2.8–4.3 ms | 0% | 8–10% |
-| Styles, scrolling | Scroll events | 118 | 4.0 ms | 0% | 5% |
-| Tailwind | `animate-*` utilities | 106–108 | 0.4–3.6 ms | 0–2% | 3–11% |
-| Controls | Transitions, 800 ms apart | 102–110 | 0.3–1.3 ms | 0% | 3–5% |
-| Web and video | Video frames, the page | 72–112 | 1.2–4.6 ms | 0% | 8–9% |
-| Photos, scrolling | Scroll events | 62 | 5.7 ms | 1% | 12% |
-| Text View, scrolling | Scroll events | 61 | 4.2 ms | 0% | 5% |
-| Scrolling, scrolling | Scroll events | 48 | 3.0 ms | 2% | 5% |
-| Lists, scrolling | Scroll events | 47 | 4.7 ms | 1% | 5% |
-| Images | GIF and WebP frames | 42–46 | 1.4–3.7 ms | 0% | 4% |
-| Form, scrolling | Scroll events | 41 | 4.6 ms | 0% | 3% |
-| Text, scrolling | Scroll events | 37 | 4.7 ms | 2% | 4% |
+| Stocks | Live data, native loops | 144 | 4.1 ms | 0% | 26% |
+| Stocks, scrolling | Live data, scroll | 144 | 4.1 ms | 0% | 25% |
+| Photos, scrolling | Scroll | 144 | 2.8 ms | 2% | 9% |
+| Lists, scrolling | Scroll | 143 | 1.7 ms | 0% | 7% |
+| Scrolling, scrolling | Scroll | 144 | 1.6 ms | 1% | 4% |
+| Navigation, scrolling | Scroll | 143 | 1.7 ms | 0% | 2% |
+| Form, scrolling | Scroll | 144 | 1.3 ms | 0% | 4% |
+| Resizable, scrolling | Scroll | 143 | 0.6 ms | 0% | 1% |
+| Dock, scrolling | Scroll | 142 | 0.5 ms | 1% | 1% |
+| Gestures | Springs, a pulsing ring | 144 | 1.6 ms | 0% | 1–5% |
+| Physics, scrolling | Scroll | 119 | 0.5 ms | 1% | 1% |
+| Animations | Native loops | 144 | 2.6 ms | 0–1% | 5% |
+| Canvas, scrolling | Scroll, native loops | 144 | 4.2 ms | 0% | 1–4% |
+| Styles, scrolling | Scroll | 144 | 2.3 ms | 2% | 3% |
+| Tailwind | `animate-*` utilities | 144 | 1.7 ms | 0% | 3–8% |
+| Text, scrolling | Scroll | 144 | 1.9 ms | 0% | 4% |
+| Text View, scrolling | Scroll | 141 | 1.8 ms | 2% | 7% |
+| Images, scrolling | Scroll, GIF and WebP frames | 143 | 2.9 ms | 2% | 8% |
+| Components, scrolling | Scroll | 144 | 1.4 ms | 0% | 3% |
+| Overlays, scrolling | Scroll | 114 | 2.1 ms | 0% | 1% |
+| Menus, scrolling | Scroll | 97 | 1.3 ms | 0% | 1% |
+| Controls | Transitions | 144 | 0.9 ms | 0% | 1–4% |
+| Web and video | Video frames, the page | 135–142 | 1.0 ms | 0% | 7–8% |
 
 </div>
 
