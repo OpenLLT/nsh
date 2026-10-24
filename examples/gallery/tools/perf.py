@@ -153,7 +153,7 @@ def main() -> int:
             "seconds": len(lines),
             "fps": statistics.median(fps),
             "fps_min": min(fps),
-            "moving_fps": min(1000 / statistics.median(gaps), float(lines[-1]["hz"])) if gaps else 0.0,
+            "moving_fps": 1000 / statistics.median(gaps) if gaps else 0.0,
             "hz": int(lines[-1]["hz"]),
             "frame_p95": max(frame_p95) if frame_p95 else 0.0,
             "over": max(over),
