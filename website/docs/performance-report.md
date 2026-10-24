@@ -287,6 +287,22 @@ bound values).
 last. Every page with nothing moving draws no frame and uses 1–2% CPU at rest. The process holds 40 MB on the
 gallery's home page and ~180 MB after the whole tour (images cached on purpose, the Text View page's documents).
 
+On an iPhone 17 Pro (ProMotion, 120 Hz), with the development host and one demo on the screen, the animated pages
+draw every refresh:
+
+<div class="data-table">
+
+| Page | Frames come from | FPS | Frame p95 | Over one refresh | CPU | Memory |
+|---|---|---|---|---|---|---|
+| Stocks | Live data, native loops | 120 | 0.2–0.3 ms | 0% | 46–70% | 41–43 MB |
+| Canvas | Native loops | 120 | 0.1 ms | 0% | 25–36% | 37–38 MB |
+| Animations | Native loops | 120 | 0.2 ms | 0% | 3–11% | 37 MB |
+
+</div>
+
+Stocks commits 20 times a second (a tick every 50 ms), each in 1.5 ms of JS and 1.4 ms of the core on the engine
+thread (p95 2.2 and 2.0 ms), which is busy 4–6% of the time.
+
 ## Measuring an app
 
 To measure an app the same way, run its tests or steps with `--fps` and `-v` on `--target linux`, `macos` or `ios`:
