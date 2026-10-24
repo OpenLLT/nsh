@@ -29,46 +29,83 @@ NSH 应用的实测开销。NSH 如何保持高速、如何测量你自己的应
 所有读数都由 `examples/gallery/tools/perf.py` 自动采集（`nsh test --target linux --fps`，每秒一行；CPU 指整个进程，以单核的百分比计）。
 *帧 p95* 是主线程绘制一帧所用时间的第 95 百分位：低于 8.3 ms，一帧就能放进 120 Hz 的一次刷新。
 
-一直在动的演示：
+### 动画演示
 
-| 演示 | 在动的内容 | fps · 帧 p95 · CPU |
-|---|---|---|
-| Stocks | 22 条原生脉动的实时走势线、每 50 ms 一次 tick 都会重绘的分时图、盘口、逐笔成交 | 117–120 · 5–6 ms · 31–32%（1200 × 800 窗口下 29%） |
-| Canvas | 仪表盘、时钟秒针和点阵，都是原生循环动画 | 120 · 2.6–4.4 ms · 5–10% |
-| Animations | 三个原生循环、弹簧、交错序列 | 120 · 2.0 ms · 12–13% |
+<div class="data-table">
 
-gallery 的每个页面，分别在刚打开时（idle）和测试用滚轮滚动时测量。帧率随画面变化而定：静止的页面不绘制帧，滚动时帧随滚轮事件到来而绘制：
+| 演示 | FPS | 帧 p95 | CPU |
+|---|---|---|---|
+| Stocks：22 条实时走势线、分时图、盘口、逐笔成交 | 117–120 | 5–6 ms | 29%（1200 × 800）、31–32%（1896 × 1030） |
+| Canvas：仪表盘、时钟、点阵 | 120 | 2.6–4.4 ms | 5–10% |
+| Animations：三个原生循环、弹簧、序列 | 120 | 2.0 ms | 12–13% |
 
-| 页面 | fps | 帧 p95 | 超过 8.3 ms 的帧 | CPU |
-|---|---|---|---|---|
-| Stocks，idle | 118–120 | 4.2–4.9 ms | 0% | 28–33% |
-| Stocks，滚动自选列表 | 119 | 5.8–6.8 ms | 1–2% | 32% |
-| Photos，滚动 | 62 | 5.7 ms | 1% | 12% |
-| Lists，滚动 | 47 | 4.7 ms | 1% | 5% |
-| Scrolling，滚动 | 48 | 3.0 ms | 2% | 5% |
-| Form，滚动 | 41 | 4.6 ms | 0% | 3% |
-| Gestures（弹簧、脉动的圆环） | 120 | 4.4–4.5 ms | 0–1% | 10% |
-| Animations | 120 | 2.0 ms | 0% | 13% |
-| Canvas | 120 | 2.8–4.3 ms | 0% | 8–10% |
-| Styles，滚动 | 118 | 4.0 ms | 0% | 5% |
-| Tailwind（动画类工具类） | 106–108 | 0.4–3.6 ms | 0–2% | 3–11% |
-| Text，滚动 | 37 | 4.7 ms | 2% | 4% |
-| Text View，滚动 | 61 | 4.2 ms | 0% | 5% |
-| Images（GIF 和 WebP 播放中） | 42–46 | 1.4–3.7 ms | 0% | 4% |
-| Controls | 102–110 | 0.3–1.3 ms | 0% | 3–5% |
-| Web and video | 72–112 | 1.2–4.6 ms | 0% | 8–9% |
+</div>
+
+### 每个页面
+
+NSH 只在屏幕上有内容变化时才绘制一帧，所以 FPS 就是变化的频率：静止的页面不绘制，动画每次刷新绘制一帧，滚动时测试每发一次滚动事件绘制一帧。
+*超过 8.3 ms* 是错过 120 Hz 刷新的帧所占的比例；为 0% 时，每一次变化都在下一次刷新就显示到了屏幕上。
+
+<div class="data-table">
+
+| 页面 | 帧的来源 | FPS | 帧 p95 | 超过 8.3 ms | CPU |
+|---|---|---|---|---|---|
+| Stocks | 实时数据、原生循环 | 118–120 | 4.2–4.9 ms | 0% | 28–33% |
+| Stocks，滚动 | 实时数据、原生循环 | 119 | 5.8–6.8 ms | 1–2% | 32% |
+| Gestures | 弹簧、脉动的圆环 | 120 | 4.4–4.5 ms | 0–1% | 10% |
+| Animations | 原生循环 | 120 | 2.0 ms | 0% | 13% |
+| Canvas | 原生循环 | 120 | 2.8–4.3 ms | 0% | 8–10% |
+| Styles，滚动 | 滚动事件 | 118 | 4.0 ms | 0% | 5% |
+| Tailwind | `animate-*` 工具类 | 106–108 | 0.4–3.6 ms | 0–2% | 3–11% |
+| Controls | 过渡动画，间隔 800 ms | 102–110 | 0.3–1.3 ms | 0% | 3–5% |
+| Web and video | 视频帧、网页 | 72–112 | 1.2–4.6 ms | 0% | 8–9% |
+| Photos，滚动 | 滚动事件 | 62 | 5.7 ms | 1% | 12% |
+| Text View，滚动 | 滚动事件 | 61 | 4.2 ms | 0% | 5% |
+| Scrolling，滚动 | 滚动事件 | 48 | 3.0 ms | 2% | 5% |
+| Lists，滚动 | 滚动事件 | 47 | 4.7 ms | 1% | 5% |
+| Images | GIF 和 WebP 的帧 | 42–46 | 1.4–3.7 ms | 0% | 4% |
+| Form，滚动 | 滚动事件 | 41 | 4.6 ms | 0% | 3% |
+| Text，滚动 | 滚动事件 | 37 | 4.7 ms | 2% | 4% |
+
+</div>
+
+### 内存
 
 启动 3 秒后的静止内存（release 运行器，480 × 640 窗口）。*私有内存*是只属于这个进程的内存（USS）；*常驻内存*还包含共享库的页面
 （GTK、GPU 驱动），这些页面由机器上所有 GTK 应用共享：
 
+<div class="data-table">
+
 | 应用 | 渲染器 | 私有内存（USS） | 常驻内存（RSS） |
 |---|---|---|---|
-| Rust 应用（`nsh init --template rust`） | GL（`ngl`） | **~49 MB** | ~142 MB |
+| Rust 应用（`nsh init --template rust`） | GL（`ngl`） | ~49 MB | ~142 MB |
 | Rust 应用 | Cairo（`GSK_RENDERER=cairo`） | ~28 MB | ~95 MB |
-| TSX 计数器（`examples/counter`） | GL | **~79 MB** | ~166 MB |
+| TSX 计数器（`examples/counter`） | GL | ~79 MB | ~166 MB |
 | 只有一个 label 的 GTK 4 窗口，作为参照 | Vulkan / Cairo | ~62 / ~40 MB | ~132 / ~109 MB |
 
+</div>
+
 再次访问同一页面不会增加内存；第一次访问某个页面时，进程增长的是它有意保留的缓存（解码后的图片，上限 128 MB）以及首次使用时加载的库（网页视图用的 WebKitGTK）。
+
+### 应用体积
+
+用 `nsh init` 的每种模板生成的 hello world 应用，以及两个实际在用的应用，由 `nsh package --target linux` 为 x86_64 构建。运行器是应用唯一的可执行文件；
+压缩包是它发布用的 `.tar.gz`。hello world 都以链接时优化构建并去除符号（`CARGO_PROFILE_RELEASE_LTO=fat`、
+`CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1`、`CARGO_PROFILE_RELEASE_STRIP=true`）：
+
+<div class="data-table">
+
+| 应用 | 编写语言 | 运行器 | 压缩包 |
+|---|---|---|---|
+| Hello world（`--template rust`） | Rust | 16.5 MB | 7.5 MB |
+| Hello world（`--template ts`） | TSX，运行在 QuickJS 上 | 25.7 MB | 11.6 MB |
+| Hello world（`--template mixed`） | TSX 加一个 Rust crate | 25.8 MB | 11.7 MB |
+| [sysmon](https://github.com/huacnlee/sysmon) 0.1.3 | Rust | 20.9 MB（去除符号后） | 9.7 MB |
+| [Omasend](https://github.com/huacnlee/omasend) 0.2.0 | Rust | 22.3 MB | 9.8 MB |
+
+</div>
+
+TSX 运行器包含 QuickJS 运行时、原生模块和渲染器；应用自己的代码是运行器旁边的 bundle，hello world 的不到 1 KB。
 
 这些数字来自：
 

@@ -30,49 +30,87 @@ Measured on a Linux desktop (x86_64, 24 threads, NVIDIA GPU), release builds, th
 one line a second; CPU is the whole process, in percent of one core). *Frame p95* is the main thread's time per drawn
 frame at the 95th percentile: under 8.3 ms, a frame fits a 120 Hz refresh.
 
-The demos that animate all the time:
+### Animated demos
 
-| Demo | What moves | fps · frame p95 · CPU |
-|---|---|---|
-| Stocks | 22 live sparklines pulsing natively, an intraday chart redrawn on every 50 ms tick, order book, tape | 117–120 · 5–6 ms · 31–32% (29% in a 1200 × 800 window) |
-| Canvas | A gauge, a clock's second hand and a dot matrix on native loops | 120 · 2.6–4.4 ms · 5–10% |
-| Animations | Three native loops, springs, staggered sequences | 120 · 2.0 ms · 12–13% |
+<div class="data-table">
 
-Every page of the gallery, idle (the page as it opens) and while the test scrolls it with the wheel. The frame rate
-follows what moves: a page at rest draws no frames, and a scroll draws frames as the wheel events come:
+| Demo | FPS | Frame p95 | CPU |
+|---|---|---|---|
+| Stocks: 22 live sparklines, an intraday chart, order book, tape | 117–120 | 5–6 ms | 29% (1200 × 800), 31–32% (1896 × 1030) |
+| Canvas: a gauge, a clock, a dot matrix | 120 | 2.6–4.4 ms | 5–10% |
+| Animations: three native loops, springs, sequences | 120 | 2.0 ms | 12–13% |
 
-| Page | fps | Frame p95 | Frames over 8.3 ms | CPU |
-|---|---|---|---|---|
-| Stocks, idle | 118–120 | 4.2–4.9 ms | 0% | 28–33% |
-| Stocks, scrolling the watchlist | 119 | 5.8–6.8 ms | 1–2% | 32% |
-| Photos, scrolling | 62 | 5.7 ms | 1% | 12% |
-| Lists, scrolling | 47 | 4.7 ms | 1% | 5% |
-| Scrolling, scrolling | 48 | 3.0 ms | 2% | 5% |
-| Form, scrolling | 41 | 4.6 ms | 0% | 3% |
-| Gestures (springs, a pulsing ring) | 120 | 4.4–4.5 ms | 0–1% | 10% |
-| Animations | 120 | 2.0 ms | 0% | 13% |
-| Canvas | 120 | 2.8–4.3 ms | 0% | 8–10% |
-| Styles, scrolling | 118 | 4.0 ms | 0% | 5% |
-| Tailwind (animated utilities) | 106–108 | 0.4–3.6 ms | 0–2% | 3–11% |
-| Text, scrolling | 37 | 4.7 ms | 2% | 4% |
-| Text View, scrolling | 61 | 4.2 ms | 0% | 5% |
-| Images (GIF and WebP playing) | 42–46 | 1.4–3.7 ms | 0% | 4% |
-| Controls | 102–110 | 0.3–1.3 ms | 0% | 3–5% |
-| Web and video | 72–112 | 1.2–4.6 ms | 0% | 8–9% |
+</div>
 
-Memory at rest, 3 s after start (release runners, a 480 × 640 window). *Private* is the memory the process alone
-owns (USS); *resident* adds the shared libraries' pages (GTK, the GPU driver), which every GTK app on the machine
-shares:
+### Every page
+
+NSH draws a frame only when something on screen changes, so FPS is the rate of change: a page at rest draws none,
+an animation draws one per refresh, and a scroll draws one per scroll event the test sends. *Over 8.3 ms* is the share
+of frames that missed a 120 Hz refresh; at 0% every change reached the screen in the next refresh.
+
+<div class="data-table">
+
+| Page | Frames come from | FPS | Frame p95 | Over 8.3 ms | CPU |
+|---|---|---|---|---|---|
+| Stocks | Live data, native loops | 118–120 | 4.2–4.9 ms | 0% | 28–33% |
+| Stocks, scrolling | Live data, native loops | 119 | 5.8–6.8 ms | 1–2% | 32% |
+| Gestures | Springs, a pulsing ring | 120 | 4.4–4.5 ms | 0–1% | 10% |
+| Animations | Native loops | 120 | 2.0 ms | 0% | 13% |
+| Canvas | Native loops | 120 | 2.8–4.3 ms | 0% | 8–10% |
+| Styles, scrolling | Scroll events | 118 | 4.0 ms | 0% | 5% |
+| Tailwind | `animate-*` utilities | 106–108 | 0.4–3.6 ms | 0–2% | 3–11% |
+| Controls | Transitions, 800 ms apart | 102–110 | 0.3–1.3 ms | 0% | 3–5% |
+| Web and video | Video frames, the page | 72–112 | 1.2–4.6 ms | 0% | 8–9% |
+| Photos, scrolling | Scroll events | 62 | 5.7 ms | 1% | 12% |
+| Text View, scrolling | Scroll events | 61 | 4.2 ms | 0% | 5% |
+| Scrolling, scrolling | Scroll events | 48 | 3.0 ms | 2% | 5% |
+| Lists, scrolling | Scroll events | 47 | 4.7 ms | 1% | 5% |
+| Images | GIF and WebP frames | 42–46 | 1.4–3.7 ms | 0% | 4% |
+| Form, scrolling | Scroll events | 41 | 4.6 ms | 0% | 3% |
+| Text, scrolling | Scroll events | 37 | 4.7 ms | 2% | 4% |
+
+</div>
+
+### Memory
+
+At rest, 3 s after start (release runners, a 480 × 640 window). *Private* is the memory the process alone owns (USS);
+*resident* adds the shared libraries' pages (GTK, the GPU driver), which every GTK app on the machine shares:
+
+<div class="data-table">
 
 | App | Renderer | Private (USS) | Resident (RSS) |
 |---|---|---|---|
-| Rust app (`nsh init --template rust`) | GL (`ngl`) | **~49 MB** | ~142 MB |
+| Rust app (`nsh init --template rust`) | GL (`ngl`) | ~49 MB | ~142 MB |
 | Rust app | Cairo (`GSK_RENDERER=cairo`) | ~28 MB | ~95 MB |
-| TSX counter (`examples/counter`) | GL | **~79 MB** | ~166 MB |
-| A GTK 4 window with one label, for reference | Vulkan / Cairo | ~62 / ~40 MB | ~132 / ~109 MB |
+| TSX counter (`examples/counter`) | GL | ~79 MB | ~166 MB |
+| GTK 4 window with one label, for reference | Vulkan / Cairo | ~62 / ~40 MB | ~132 / ~109 MB |
+
+</div>
 
 Revisiting a page adds no memory; the first visit to a page grows the process by what it caches on purpose (decoded
 images, bounded at 128 MB) and the libraries it loads on first use (WebKitGTK for web views).
+
+### App size
+
+A hello world app made by `nsh init` with each template, and two apps people use, as `nsh package --target linux`
+builds them for x86_64. The runner is the app's one executable; the archive is the `.tar.gz` it ships as. The hello
+worlds are built with link-time optimization and stripped (`CARGO_PROFILE_RELEASE_LTO=fat`,
+`CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1`, `CARGO_PROFILE_RELEASE_STRIP=true`):
+
+<div class="data-table">
+
+| App | Written in | Runner | Archive |
+|---|---|---|---|
+| Hello world (`--template rust`) | Rust | 16.5 MB | 7.5 MB |
+| Hello world (`--template ts`) | TSX, on QuickJS | 25.7 MB | 11.6 MB |
+| Hello world (`--template mixed`) | TSX and a Rust crate | 25.8 MB | 11.7 MB |
+| [sysmon](https://github.com/huacnlee/sysmon) 0.1.3 | Rust | 20.9 MB stripped | 9.7 MB |
+| [Omasend](https://github.com/huacnlee/omasend) 0.2.0 | Rust | 22.3 MB | 9.8 MB |
+
+</div>
+
+The TSX runners hold the QuickJS runtime, the native modules and the renderer; an app's own code is its bundle beside
+the runner, under 1 KB for a hello world.
 
 What makes these numbers:
 
