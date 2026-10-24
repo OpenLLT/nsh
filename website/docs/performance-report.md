@@ -37,6 +37,7 @@ frame at the 95th percentile: under 8.3 ms, a frame fits a 120 Hz refresh.
 | Demo | FPS | Frame p95 | CPU |
 |---|---|---|---|
 | Stocks: 22 live sparklines, an intraday chart, order book, tape | 117–120 | 5–6 ms | 29% (1200 × 800), 31–32% (1896 × 1030) |
+| Stocks, the window filling a 4K 144 Hz display at 1.6× | 143–145 | 4.1–4.4 ms | 26–29% |
 | Canvas: a gauge, a clock, a dot matrix | 120 | 2.6–4.4 ms | 5–10% |
 | Animations: three native loops, springs, sequences | 120 | 2.0 ms | 12–13% |
 
