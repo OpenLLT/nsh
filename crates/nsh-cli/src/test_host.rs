@@ -37,12 +37,12 @@ pub(crate) fn starter(
     if browser.is_some() && target != Target::Web {
         anyhow::bail!("--browser goes with --target web");
     }
-    if fps && !matches!(target, Target::Linux | Target::Macos) {
-        anyhow::bail!("--fps goes with --target linux or macos");
+    if fps && !matches!(target, Target::Linux | Target::Macos | Target::Ios) {
+        anyhow::bail!("--fps goes with --target linux, macos or ios");
     }
     match target {
         Target::Web => return crate::test_web::starter(browser),
-        Target::Ios => return crate::test_ios::starter(work),
+        Target::Ios => return crate::test_ios::starter(work, fps),
         Target::Android => return crate::test_android::starter(work),
         _ => {}
     }
