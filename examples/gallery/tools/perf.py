@@ -13,7 +13,9 @@ Each scenario is measured for `--seconds` after a second of warm-up. `fps` is
 the frames drawn per second (0 for a page with nothing moving), `moving` the
 rate while something moves (one frame per median gap between drawn frames), `frame p95`
 the main thread's time per drawn frame and `over` the share of frames longer
-than a 120 Hz refresh (8.3 ms); `cpu` is the process' (percent of one core).
+than a 120 Hz refresh (8.3 ms); `cpu` is the process' (percent of one core),
+`gpu` its share of the GPU (macOS) and `mem` its memory (Linux: resident,
+macOS: physical footprint); then the platform's frame phases (mean ms).
 """
 
 import argparse
@@ -34,12 +36,17 @@ DEMOS = [
     "Components", "Overlays", "Menus", "Controls", "Web and video", "System", "Standard APIs", "Storage",
 ]
 
+# One second's `nsh::perf` line: the fields both desktops log, and between
+# `over` and `commits` the platform's frame phases as `name mean/p50/p95/max`
+# (Linux: update, layout, paint, snapshot, canvas, drain; macOS: tick,
+# drain, canvas).
 LINE = re.compile(
     r"fps (?P<fps>\d+)/(?P<hz>\d+) frame (?P<frame>[\d./]+) gap (?P<gap>[\d./]+) over (?P<over>\d+)% "
-    r"update (?P<update>[\d./]+) layout (?P<layout>[\d./]+) paint (?P<paint>[\d./]+) snapshot (?P<snapshot>[\d./]+) canvas (?P<canvas>[\d./]+) "
-    r"drain (?P<drain>[\d./]+) commits (?P<commits>\d+) js (?P<js>[\d./]+) core (?P<core>[\d./]+) "
-    r"items (?P<items>\d+) engine (?P<engine>\d+)% cpu (?P<cpu>[\d-]+)%? rss (?P<rss>[\d.]+) MB"
+    r"(?P<phases>.*?) ?commits (?P<commits>\d+) js (?P<js>[\d./]+) core (?P<core>[\d./]+) "
+    r"items (?P<items>\d+) engine (?P<engine>\d+)% cpu (?P<cpu>[\d-]+)%?(?: gpu (?P<gpu>[\d-]+)%?)? "
+    r"(?:rss|mem) (?P<rss>[\d.]+) MB"
 )
+PHASE = re.compile(r"(?P<name>[a-z]+) (?P<stat>[\d.]+/[\d.]+/[\d.]+/[\d.]+)")
 MARK = re.compile(r"@@perf (?P<name>.+)$")
 
 
@@ -131,7 +138,9 @@ def main() -> int:
             if skip:
                 skip -= 1
                 continue
-            readings[scenario].append(m.groupdict())
+            reading = m.groupdict()
+            reading["phases"] = {p["name"]: p["stat"] for p in PHASE.finditer(reading["phases"])}
+            readings[scenario].append(reading)
     code = proc.wait()
     if code != 0:
         sys.stdout.write("".join(log[-60:]))
@@ -163,18 +172,23 @@ def main() -> int:
             "commits": statistics.median(int(l["commits"]) for l in lines),
             "core_p95": max(summary(l["core"])[2] for l in lines),
             "js_p95": max(summary(l["js"])[2] for l in lines),
+            "gpu": statistics.mean(int(l["gpu"]) for l in lines if l["gpu"] not in (None, "-")) if any(l["gpu"] not in (None, "-") for l in lines) else None,
             # Means over the drawn frames' seconds.
-            **{
-                phase: statistics.mean(summary(l[phase])[0] for l in lines if int(l["fps"]) > 0) if frame_p95 else 0.0
-                for phase in ("update", "layout", "paint", "snapshot", "canvas")
+            "phases": {
+                phase: statistics.mean(summary(l["phases"][phase])[0] for l in drawn)
+                for phase in dict.fromkeys(p for l in lines for p in l["phases"])
+                if (drawn := [l for l in lines if int(l["fps"]) > 0 and phase in l["phases"]])
             },
         })
-    print(f"{'scenario':<26}{'fps':>6}{'min':>5}{'moving':>8}{'frame p95':>11}{'over':>6}{'cpu':>7}{'max':>6}{'rss MB':>8}{'commits':>9}{'core p95':>10}{'js p95':>8}  update/layout/paint/snapshot/canvas")
+    # Every phase any row has, in the order the lines name them.
+    phases = list(dict.fromkeys(p for r in readings.values() for l in r for p in l["phases"]))
+    print(f"{'scenario':<26}{'fps':>6}{'min':>5}{'moving':>8}{'frame p95':>11}{'over':>6}{'cpu':>7}{'max':>6}{'gpu':>6}{'mem MB':>8}{'commits':>9}{'core p95':>10}{'js p95':>8}  {'/'.join(phases)}")
     for r in rows:
+        gpu = f"{r['gpu']:>5.0f}%" if r["gpu"] is not None else f"{'-':>6}"
         print(
             f"{r['scenario']:<26}{r['fps']:>6.0f}{r['fps_min']:>5}{r['moving_fps']:>8.0f}{r['frame_p95']:>9.2f}ms{r['over']:>5}%"
-            f"{r['cpu']:>6.0f}%{r['cpu_max']:>5}%{r['rss']:>8.1f}{r['commits']:>9.0f}{r['core_p95']:>8.2f}ms{r['js_p95']:>6.2f}ms"
-            f"  {r['update']:.2f}/{r['layout']:.2f}/{r['paint']:.2f}/{r['snapshot']:.2f}/{r['canvas']:.2f}"
+            f"{r['cpu']:>6.0f}%{r['cpu_max']:>5}%{gpu}{r['rss']:>8.1f}{r['commits']:>9.0f}{r['core_p95']:>8.2f}ms{r['js_p95']:>6.2f}ms"
+            f"  {'/'.join(f'{r['phases'].get(p, 0):.2f}' for p in phases)}"
         )
     (work / "log.txt").write_text("".join(log))
     out = Path(args.out) if args.out else work / "readings.json"
