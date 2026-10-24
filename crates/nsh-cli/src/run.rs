@@ -139,8 +139,10 @@ pub(crate) fn run(
     window: HostWindow<'_>,
 ) -> anyhow::Result<()> {
     let HostFlags { limits, trace, fps } = flags;
-    if fps && target != Target::Macos {
-        bail!("--fps needs --target macos (the other hosts have no performance monitor yet)");
+    if fps && !matches!(target, Target::Macos | Target::Linux) {
+        bail!(
+            "--fps needs --target macos or linux (the other hosts have no performance monitor yet)"
+        );
     }
     window.check(target, crate::rust_app::is_root(entry))?;
     let work = dunce::canonicalize(entry)?

@@ -275,6 +275,26 @@ draw a panel.
 
 The dev profile builds `quickjs-jit-sys` and `taffy` with `opt-level = 3`, so debug timings are meaningful too; release uses fat LTO.
 
+- Linux (GTK 4, release; a 1896×1030 window on a 120 Hz headless Hyprland output, NVIDIA; `--fps` readings and the
+  host's threads' CPU from `/proc`, 20 s runs). Before = main as of `8ff7b9f6` (GSK's Vulkan renderer, canvases
+  replayed into a Cairo recording surface on every change):
+
+  | Scenario | Before: fps, frame p95, CPU | After: fps, frame p95, CPU |
+  |---|---|---|
+  | Stocks (live prices, sparklines, chart, a tick every 50 ms) | 75–87, 17–21 ms, 82–85% | 117–120, 5–6 ms, 31–32% (29% at 1200×800) |
+  | Canvas demo | 118–120, 6–11 ms, 17–23% | 120, 2.6–4.4 ms, 5–10% |
+  | Animations demo | 66–85, 21–25 ms, 73% | 120, 2.0 ms, 12–13% |
+
+  Every page of the gallery draws its frames in under 8.3 ms at p95 (`examples/gallery/tools/perf.py`). On Stocks
+  the GL renderer alone gave 116 fps at 62%; the canvas rasters (tiles, partial redraws over the kept static part,
+  canvases out of sight waiting) took it to the rest. What is left is GSK's rendering (~12% of the main thread: GL
+  commands for the damaged areas), Cairo's rasterizing (~8%, strokes most of it: the chart's full redraw on every
+  tick costs ~1.7 ms, a sparkline's pulse ~21 µs) and the engine (~5%: the demo's market in JS, canvas recording,
+  layout). `fillRect` / `fillText` after a long path set it aside once instead of copying it out and back per
+  call: a 400-point line then 240 bars, 840×340, 1.68 → 0.63 ms (`cargo test --release -p nsh-platform-linux
+  bench_rects_after_a_path -- --ignored --nocapture`). Memory: visiting a demo again adds nothing; the first visits
+  grow by bounded caches (decoded images, up to 128 MB) and libraries loaded on first use (WebKitGTK).
+
 - Tailwind containing blocks, font-relative lengths and intrinsic text sizes (PR #323 follow-up, Linux,
   debug counter trace against `70254f80`): first commit 656 → 674µs, press commit 313 → 312µs;
   both runs produce 56 ops / 49 mount items / 21 nodes initially and 10 ops / 7 mount items / 24 nodes

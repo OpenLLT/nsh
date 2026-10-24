@@ -148,6 +148,11 @@ enum Command {
         /// step it came in, and the time of every commit.
         #[arg(long)]
         trace: bool,
+        /// Log the performance monitor's readings of the apps the tests
+        /// open, once a second: frame rate, frame and commit costs, CPU,
+        /// memory (`--target linux` or `macos`; shown with `-v`).
+        #[arg(long)]
+        fps: bool,
         /// Also write the results to this file as a JUnit XML report, the
         /// format CI services read.
         #[arg(long, value_name = "FILE")]
@@ -243,7 +248,8 @@ enum Command {
         #[arg(long)]
         trace: bool,
         /// Show the performance monitor over the app: frame rate, frame and
-        /// commit costs, CPU, GPU, memory (`--target macos`).
+        /// commit costs, CPU, GPU, memory (`--target macos`; `--target linux`
+        /// logs its readings once a second).
         #[arg(long)]
         fps: bool,
         /// Where to run.
@@ -590,6 +596,7 @@ fn dispatch(command: Command) -> anyhow::Result<()> {
             entry,
             filter,
             trace,
+            fps,
             junit,
             target,
             browser,
@@ -599,6 +606,7 @@ fn dispatch(command: Command) -> anyhow::Result<()> {
             &entry,
             filter,
             trace,
+            fps,
             junit.as_deref(),
             target,
             browser.as_deref(),

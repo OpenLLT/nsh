@@ -11,7 +11,7 @@ mod hit;
 use std::sync::Arc;
 
 pub use self::{
-    damage::{Damage, DamageScan},
+    damage::{Damage, DamageScan, first_animated},
     hit::{point_in_path, point_in_stroke},
 };
 use crate::{
