@@ -51,7 +51,7 @@ use nsh_core::{
     canvas::{
         CanvasFont, CanvasGradient, CanvasOp, CanvasTextAlign, CanvasTextBaseline, Composite,
         Damage, DamageScan, Drawing, FillRule, GradientShape, LineCap, LineJoin, Num, Paint,
-        PathOp, arc_sweep, first_animated, fit_radii,
+        PathOp, arc_sweep, first_animated, fit_radii, prefix_path_needed,
     },
     geometry::{Corners, Points, Radians, size},
 };
@@ -440,7 +440,7 @@ fn rasterize(
         };
         for (i, op) in ops.iter().enumerate() {
             if kept.is_some_and(|k| i < k)
-                && (paints(op)
+                && (op.paints()
                     || (!canvas.split_path
                         && matches!(op, CanvasOp::BeginPath | CanvasOp::Path(_))))
             {
@@ -521,44 +521,6 @@ fn memory_texture(data: &[u8], stride: usize, [x, y, w, h]: [i32; 4]) -> gdk::Te
         gdk::MemoryFormat::A8r8g8b8Premultiplied
     };
     gdk::MemoryTexture::new(w as i32, h as i32, format, &bytes, w * 4).upcast()
-}
-
-/// Whether the current path the operations before `split` build matters
-/// from `split` on: a clip by it before `split` keeps it, and so does an
-/// operation from `split` on that uses it before a `beginPath` starts anew.
-fn prefix_path_needed(ops: &[CanvasOp], split: usize) -> bool {
-    if ops[..split]
-        .iter()
-        .any(|op| matches!(op, CanvasOp::Clip(None, _)))
-    {
-        return true;
-    }
-    ops[split..]
-        .iter()
-        .find_map(|op| match op {
-            CanvasOp::BeginPath => Some(false),
-            CanvasOp::Path(_)
-            | CanvasOp::Fill(None, _)
-            | CanvasOp::Stroke(None)
-            | CanvasOp::Clip(None, _) => Some(true),
-            _ => None,
-        })
-        .unwrap_or(false)
-}
-
-/// Whether `op` paints (rather than setting the state).
-fn paints(op: &CanvasOp) -> bool {
-    matches!(
-        op,
-        CanvasOp::Fill(..)
-            | CanvasOp::Stroke(_)
-            | CanvasOp::FillRect(_)
-            | CanvasOp::StrokeRect(_)
-            | CanvasOp::ClearRect(_)
-            | CanvasOp::FillText { .. }
-            | CanvasOp::StrokeText { .. }
-            | CanvasOp::DrawImage { .. }
-    )
 }
 
 /// A copy of `surface`'s pixels, in `into` (a surface of the same size)

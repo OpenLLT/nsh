@@ -146,7 +146,7 @@ the main thread's per frame: *tick* (the display link's native animations) and *
 | Demo | FPS | Frame p95 | CPU | GPU |
 |---|---|---|---|---|
 | Stocks: 22 live sparklines, an intraday chart, order book, tape | 120 | 2.7–3.7 ms | 33–36% | 18–22% |
-| Canvas: a gauge, a clock, a dot matrix | 119–120 | 1.0–1.6 ms | 8–13% | 3–8% |
+| Canvas: a gauge, a clock, a dot matrix | 119–120 | 0.6–0.7 ms | 4–7% | 0% |
 | Animations: three native loops, springs, sequences | 119–120 | 0.3–1.6 ms | 5–8% | 0% |
 
 </div>
@@ -179,7 +179,7 @@ Animation and video in AVFoundation, at their own frame rates.
 | Gestures | Springs, a pulsing ring | 120 | 0.4 ms | 0% | 4% |
 | Physics, scrolling | Scroll | 120 | 0.3 ms | 0% | 4% |
 | Animations | Native loops | 120 | 0.3 ms | 0% | 5% |
-| Canvas, scrolling | Scroll, native loops | 120 | 1.6 ms | 0% | 9% |
+| Canvas, scrolling | Scroll, native loops | 120 | 1.2 ms | 0% | 7% |
 | Styles, scrolling | Scroll, a swaying transform | 120 | 1.0 ms | 0% | 6% |
 | Tailwind | `animate-*` utilities | 120 | 0.5 ms | 0% | 4% |
 | Text, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
@@ -213,7 +213,7 @@ Monitor shows); *resident* adds the pages of the system's shared libraries:
 
 Through the gallery's tour the process holds 84–230 MB up to the Canvas page and ~350–360 MB from the Text View page
 on, with what it caches on purpose (decoded images, bounded at 128 MB; the Text View page's documents) and the
-frameworks it loads on first use (WebKit for web views); the Canvas page's rasters, up to ~400 MB with all three
+frameworks it loads on first use (WebKit for web views); the Canvas page's rasters, up to ~380 MB with all three
 canvases on screen, go when the page closes.
 
 ### App size
@@ -240,6 +240,9 @@ What makes these numbers:
   stops with its page (its view's deletion ends its keyframes, a loop stops in its component's `cleanup`).
 - **Canvases on Core Animation's threads**: canvases draw asynchronously (`drawsAsynchronously`), and an animated value
   redraws only the area the operations reading it cover.
+- **Static canvas parts kept**: once a drawing stays unchanged, a long part before its first animated operation is
+  kept as a layer; each frame draws that layer and replays only the animated rest, at once on the main thread (the
+  Canvas page's gauge, clock and dot matrix: no GPU work and half the memory).
 - **Content drawn when it changes**: texts and canvases draw into layers of their own, again when their content or
   size changes, not when they move or scroll.
 

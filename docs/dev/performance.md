@@ -224,6 +224,15 @@ draw a panel.
   p50 ~1.9 → ~1.7 ms, CPU ~38–40% both; a test canvas (524×340: a 400-point area and line, 400 bars, a pulsing ring,
   a moving square) presented 86–117 fps before and 92–119 after, `main` p50 ~1.2 → ~1.0 ms, CPU ~17% both.
 
+  Kept static parts (`canvas.rs` `Prefix`, `docs/dev/canvas.md`; `examples/gallery/tools/perf.py --only
+  Stocks,Canvas,Animations --seconds 6`, two runs each, the display kept awake): a long static part, painted unchanged
+  30 times, is kept as a `CGLayer` and its canvas drawn at once. Canvas demo idle: canvas phase 0.24–0.27 →
+  0.09–0.11 ms, CPU 7–10% → 4–6%, GPU 5–6% → 0%, ~200–220 → ~106 MB; Stocks and Animations unchanged (their
+  drawings are short or change every few frames, so none is kept). Tried and not kept: the layer for every drawing
+  (Stocks' frame p95 ~3.3 → ~4.2 ms: its sparklines change ~15 times a second and replay faster than a layer draws),
+  every canvas at once (Stocks p95 ~3.3 → ~7.5 ms, 2% of frames over a refresh: the main thread fills the screen's
+  RGBA16F backing stores), 8-bit contents (canvas phase ~0.45 → ~1.6 ms).
+
   List binds while scrolling (release host, 120 Hz MacBook Pro; the list scrolled by chained native
   `scrollToOffset({ animated: true })` every 300 ms, no input; each display link refresh logged with its link
   timestamp and main-thread time; three runs each, refreshes missed = link gaps of two periods or more). Before =

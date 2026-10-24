@@ -656,6 +656,32 @@ pub fn first_animated(ops: &[CanvasOp]) -> usize {
         .unwrap_or(ops.len())
 }
 
+/// Whether the current path the operations of `ops` before `split` build
+/// matters from `split` on: a clip by it before `split` keeps it, and so
+/// does an operation from `split` on that uses it before a `beginPath`
+/// starts anew. A platform replaying only from [`first_animated`] on skips
+/// the path operations before it when it does not.
+pub fn prefix_path_needed(ops: &[CanvasOp], split: usize) -> bool {
+    let split = split.min(ops.len());
+    if ops[..split]
+        .iter()
+        .any(|op| matches!(op, CanvasOp::Clip(None, _)))
+    {
+        return true;
+    }
+    ops[split..]
+        .iter()
+        .find_map(|op| match op {
+            CanvasOp::BeginPath => Some(false),
+            CanvasOp::Path(_)
+            | CanvasOp::Fill(None, _)
+            | CanvasOp::Stroke(None)
+            | CanvasOp::Clip(None, _) => Some(true),
+            _ => None,
+        })
+        .unwrap_or(false)
+}
+
 /// Whether `op` reads a changed value.
 fn path_op_dep(op: &PathOp, dep: &impl Fn(&Num) -> bool) -> bool {
     match op {
