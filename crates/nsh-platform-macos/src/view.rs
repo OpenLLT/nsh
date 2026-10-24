@@ -365,7 +365,13 @@ define_class!(
             // What Core Animation redraws (all of it, or a canvas's part
             // that animated values changed), top down.
             let dirty = CGContext::clip_bounding_box(c);
-            crate::canvas::draw(cx, &state, dirty);
+            if crate::fps::measuring() && state.canvas.is_some() {
+                let start = std::time::Instant::now();
+                crate::canvas::draw(cx, &state, dirty);
+                crate::fps::drew_canvas(start.elapsed());
+            } else {
+                crate::canvas::draw(cx, &state, dirty);
+            }
             CGContext::restore_g_state(c);
         }
 
