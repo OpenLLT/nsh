@@ -1,6 +1,6 @@
 ---
 title: Performance report
-description: Measured numbers of NSH apps - commit and frame costs from NSH's baselines, and the gallery's frame rate, CPU and memory page by page on Linux - with how to reproduce them.
+description: Measured numbers of NSH apps - commit and frame costs from NSH's baselines, and the gallery's frame rate, CPU and memory page by page on Linux, macOS and iOS - with how to reproduce them.
 order: 62.5
 group: tools
 ---
@@ -132,11 +132,168 @@ What makes these numbers:
 - **Paths set aside once**: `fillRect` and `fillText` after a long path leave it in place until it is used again (a
   400-point line then 240 bars: 0.63 ms).
 
-To measure an app the same way, run its tests or steps with `--fps` and `-v`:
+## macOS (AppKit)
+
+Measured on a MacBook Pro (Apple M3, 24 GB) on its built-in 120 Hz ProMotion display, release builds, the gallery in
+a 1200 × 800 window, every reading taken automatically by `examples/gallery/tools/perf.py` (`nsh test --target macos
+--fps`, one line a second; CPU is the whole process, in percent of one core, GPU its share of the GPU). The phases are
+the main thread's per frame: *tick* (the display link's native animations) and *canvas* (replaying drawings).
+
+### Animated demos
+
+<div class="data-table">
+
+| Demo | FPS | Frame p95 | CPU | GPU |
+|---|---|---|---|---|
+| Stocks: 22 live sparklines, an intraday chart, order book, tape | 120 | 2.7–3.7 ms | 33–36% | 18–22% |
+| Canvas: a gauge, a clock, a dot matrix | 119–120 | 1.0–1.6 ms | 8–13% | 3–8% |
+| Animations: three native loops, springs, sequences | 119–120 | 0.3–1.6 ms | 5–8% | 0% |
+
+</div>
+
+On Stocks a frame's main-thread time is ~1.6 ms of ticks, of which ~0.45 ms replays the canvases' animated parts;
+Core Animation draws the rest of each canvas on its own threads.
+
+### Every page
+
+Every page of the gallery, as it opens and while the test scrolls it, in the same 1200 × 800 window. As on Linux, *FPS*
+is the rate while something moves (one frame per median gap between drawn frames); at the display's 120, every frame
+of an animation or a scroll comes one refresh after the last. *Over one refresh* is the share of frames that took
+longer than a refresh (8.3 ms). A page at rest draws no frame and uses 2–5% CPU. Images' GIF and WebP play in Core
+Animation and video in AVFoundation, at their own frame rates.
+
+<div class="data-table">
+
+| Page | Frames come from | FPS | Frame p95 | Over one refresh | CPU |
+|---|---|---|---|---|---|
+| Stocks | Live data, native loops | 120 | 3.2 ms | 0% | 35% |
+| Stocks, scrolling | Live data, scroll | 120 | 3.5 ms | 0% | 36% |
+| AI Chat, scrolling | Scroll | 120 | 2.4 ms | 1% | 5% |
+| Photos, scrolling | Scroll | 120 | 1.4 ms | 0% | 10% |
+| Lists, scrolling | Scroll | 120 | 1.6 ms | 0% | 8% |
+| Scrolling, scrolling | Scroll | 120 | 2.7 ms | 0% | 6% |
+| Navigation, scrolling | Scroll | 120 | 0.2 ms | 0% | 4% |
+| Form, scrolling | Scroll | 120 | 0.6 ms | 0% | 5% |
+| Resizable, scrolling | Scroll | 120 | 0.3 ms | 0% | 4% |
+| Dock, scrolling | Scroll | 120 | 0.3 ms | 1% | 5% |
+| Gestures | Springs, a pulsing ring | 120 | 0.4 ms | 0% | 4% |
+| Physics, scrolling | Scroll | 120 | 0.3 ms | 0% | 4% |
+| Animations | Native loops | 120 | 0.3 ms | 0% | 5% |
+| Canvas, scrolling | Scroll, native loops | 120 | 1.6 ms | 0% | 9% |
+| Styles, scrolling | Scroll, a swaying transform | 120 | 1.0 ms | 0% | 6% |
+| Tailwind | `animate-*` utilities | 120 | 0.5 ms | 0% | 4% |
+| Text, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
+| Text View, scrolling | Scroll | 120 | 0.7 ms | 0% | 5% |
+| Images, scrolling | Scroll | 120 | 0.4 ms | 0% | 5% |
+| Components, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
+| Overlays, scrolling | Scroll | 120 | 0.3 ms | 0% | 4% |
+| Menus, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
+| Controls | Transitions | 120 | 0.3 ms | 0% | 4% |
+| Web and video, scrolling | Scroll | 120 | 0.2 ms | 0% | 6% |
+| System | `requestAnimationFrame`, timers | 120 | 0.2 ms | 0% | 3% |
+| Standard APIs, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
+| Storage, scrolling | Scroll | 120 | 0.3 ms | 0% | 5% |
+
+</div>
+
+### Memory
+
+At rest, 3 s after start (release runners). *Footprint* is the memory macOS charges the process (what Activity
+Monitor shows); *resident* adds the pages of the system's shared libraries:
+
+<div class="data-table">
+
+| App | Window | Footprint | Resident (RSS) |
+|---|---|---|---|
+| Rust app (`nsh init --template rust`) | 1200 × 800 | ~19 MB | ~86 MB |
+| TSX counter (`examples/counter`) | 1200 × 800 | ~20 MB | ~89 MB |
+| AppKit window with one label, for reference | 480 × 640 | ~17 MB | ~80 MB |
+
+</div>
+
+Through the gallery's tour the process holds 84–230 MB up to the Canvas page and ~350–360 MB from the Text View page
+on, with what it caches on purpose (decoded images, bounded at 128 MB; the Text View page's documents) and the
+frameworks it loads on first use (WebKit for web views); the Canvas page's rasters, up to ~400 MB with all three
+canvases on screen, go when the page closes.
+
+### App size
+
+The hello world apps made by `nsh init` with each template, as `nsh package --target macos` builds them for Apple
+silicon (arm64), with link-time optimization and stripped as on Linux, and the two apps above as they ship for Apple
+silicon. The executable is the runner inside the `.app`; the zip is the `.app` compressed (`ditto -c -k`):
+
+<div class="data-table">
+
+| App | Written in | Executable | Zipped `.app` |
+|---|---|---|---|
+| Hello world (`--template rust`) | Rust | 12.4 MB | 6.0 MB |
+| Hello world (`--template ts`) | TSX, on QuickJS | 19.8 MB | 9.5 MB |
+| Hello world (`--template mixed`) | TSX and a Rust crate | 19.8 MB | 9.5 MB |
+| [sysmon](https://github.com/huacnlee/sysmon) 0.1.3 | Rust | 21.6 MB | 8.4 MB (its release's `.tar.gz`) |
+| [Omasend](https://github.com/huacnlee/omasend) 0.2.0 | Rust | 18.4 MB | 9.7 MB (its release's `.tar.gz`) |
+
+</div>
+
+What makes these numbers:
+
+- **Frames only for changes**: the display link ticks while a native animation runs and stops with it; an animation
+  stops with its page (its view's deletion ends its keyframes, a loop stops in its component's `cleanup`).
+- **Canvases on Core Animation's threads**: canvases draw asynchronously (`drawsAsynchronously`), and an animated value
+  redraws only the area the operations reading it cover.
+- **Content drawn when it changes**: texts and canvases draw into layers of their own, again when their content or
+  size changes, not when they move or scroll.
+
+## iOS (UIKit)
+
+Measured in the iOS simulator (an iPhone 18 Pro Max, on the MacBook Pro above), release builds, with the same tour
+(`perf.py --target ios`: `nsh test --target ios --fps`, a finger's touches as UIKit gets them). The simulator presents
+at 60 Hz; on an iPhone with a ProMotion screen NSH's display links run at the screen's 120 Hz (apps that `nsh package`
+builds and the development host ask for it with `CADisableMinimumFrameDurationOnPhone`). The phases are *tick* (native
+animations), *drain* (applying the engine's batches) and *scroll* (what follows a scroll view: lists, sticky cells,
+bound values).
+
+<div class="data-table">
+
+| Page | Frames come from | FPS | Frame p95 | CPU |
+|---|---|---|---|---|
+| Home, scrolling | Scroll | 60 | 0.1 ms | 6% |
+| Stocks | Live data, native loops | 60 | 0.3 ms | 22% |
+| Stocks, scrolling | Live data, scroll | 60 | 0.3 ms | 25% |
+| Photos, scrolling | Scroll | 60 | 1.2 ms | 6% |
+| Lists, scrolling | Scroll | 60 | 1.1 ms | 8% |
+| Scrolling, scrolling | Scroll | 60 | 0.1 ms | 7% |
+| Navigation, scrolling | Scroll | 60 | 0.2 ms | 7% |
+| Form, scrolling | Scroll | 60 | 0.3 ms | 7% |
+| Gestures | Springs, a pulsing ring | 60 | 0.3 ms | 3% |
+| Animations | Native loops | 60 | 0.7 ms | 6% |
+| Canvas | Native loops | 60 | 0.4 ms | 16% |
+| Styles | A swaying transform | 60 | 0.4 ms | 4% |
+| Tailwind, scrolling | Scroll | 60 | 0.2 ms | 7% |
+| Text, scrolling | Scroll | 60 | 0.1 ms | 7% |
+| Text View, scrolling | Scroll | 60 | 0.1 ms | 6% |
+| Images, scrolling | Scroll | 60 | 0.1 ms | 5% |
+| Components, scrolling | Scroll | 60 | 0.2 ms | 6% |
+| Overlays, scrolling | Scroll | 60 | 0.1 ms | 6% |
+| Menus, scrolling | Scroll | 60 | 0.2 ms | 7% |
+| Controls, scrolling | Scroll, transitions | 60 | 0.2 ms | 5% |
+| Web and video, scrolling | Scroll | 60 | 0.1 ms | 8% |
+| System | `requestAnimationFrame`, timers | 60 | 0.3 ms | 4% |
+| Standard APIs, scrolling | Scroll | 60 | 0.1 ms | 7% |
+| Storage, scrolling | Scroll | 60 | 0.1 ms | 8% |
+
+</div>
+
+*FPS* is the rate while something moves, as above: at the simulator's 60, every frame comes one refresh after the
+last. Every page with nothing moving draws no frame and uses 1–2% CPU at rest. The process holds 40 MB on the
+gallery's home page and ~180 MB after the whole tour (images cached on purpose, the Text View page's documents).
+
+## Measuring an app
+
+To measure an app the same way, run its tests or steps with `--fps` and `-v` on `--target linux`, `macos` or `ios`:
 
 ```sh
 cargo build --release -p nsh-cli
-python3 examples/gallery/tools/perf.py --only Stocks,Canvas     # the gallery, page by page
-echo 'await app.wait(5000)' | nsh -v test App.tsx --target linux --fps   # any app
+python3 examples/gallery/tools/perf.py --target macos --only Stocks,Canvas   # the gallery, page by page
+echo 'await app.wait(5000)' | nsh -v test App.tsx --target linux --fps        # any app
 ```
 

@@ -1,6 +1,6 @@
 ---
 title: 性能报告
-description: NSH 应用的实测数据：NSH 基线中的提交与帧开销，以及 gallery 在 Linux 上逐页的帧率、CPU 和内存，并附复现方法。
+description: NSH 应用的实测数据：NSH 基线中的提交与帧开销，以及 gallery 在 Linux、macOS 和 iOS 上逐页的帧率、CPU 和内存，并附复现方法。
 order: 62.5
 group: tools
 ---
@@ -122,11 +122,156 @@ TSX 运行器包含 QuickJS 运行时、原生模块和渲染器；应用自己�
 - **Canvas 栅格**：每个 canvas 只栅格化一次，分成保存在 GPU 上的 256 px 图块。动画值变化时，只重绘读取它的操作覆盖的区域，并叠加在绘制中静态部分保留下来的像素上；看不见的 canvas 会等到滚入视野再绘制。
 - **路径只暂存一次**：长路径之后的 `fillRect` 和 `fillText` 会把路径留在原处，直到再次用到它（一条 400 点的折线加 240 根柱子：0.63 ms）。
 
-用同样的方式测量一个应用，带上 `--fps` 和 `-v` 运行它的测试或步骤：
+## macOS（AppKit）
+
+测量环境：MacBook Pro（Apple M3，24 GB）的内置 120 Hz ProMotion 显示屏，release 构建，gallery 运行在 1200 × 800 的窗口里，
+所有读数都由 `examples/gallery/tools/perf.py` 自动采集（`nsh test --target macos --fps`，每秒一行；CPU 指整个进程，以单核的百分比计，
+GPU 是它占用 GPU 的比例）。阶段是主线程每帧的开销：*tick*（display link 上的原生动画）和 *canvas*（重放绘制）。
+
+### 动画演示
+
+<div class="data-table">
+
+| 演示 | FPS | 帧 p95 | CPU | GPU |
+|---|---|---|---|---|
+| Stocks：22 条实时走势线、分时图、盘口、逐笔成交 | 120 | 2.7–3.7 ms | 33–36% | 18–22% |
+| Canvas：仪表盘、时钟、点阵 | 119–120 | 1.0–1.6 ms | 8–13% | 3–8% |
+| Animations：三个原生循环、弹簧、序列 | 119–120 | 0.3–1.6 ms | 5–8% | 0% |
+
+</div>
+
+Stocks 上一帧的主线程时间约 1.6 ms 用于 tick，其中约 0.45 ms 重放 canvas 中的动画部分；每个 canvas 的其余部分由 Core Animation
+在自己的线程上绘制。
+
+### 每个页面
+
+gallery 的每个页面，打开时以及测试滚动它时，同样在 1200 × 800 的窗口里。与 Linux 一样，*FPS* 是有东西在动时的速率（每个相邻绘制帧间隔的中位数一帧）；
+达到显示器的 120 时，动画或滚动的每一帧都在上一帧之后的下一次刷新到来。*超过一次刷新*是耗时超过一次刷新（8.3 ms）的帧所占的比例。
+静止的页面不绘制帧，CPU 为 2–5%。图片的 GIF 和 WebP 由 Core Animation 播放，视频由 AVFoundation 播放，按各自的帧率。
+
+<div class="data-table">
+
+| 页面 | 帧的来源 | FPS | 帧 p95 | 超过一次刷新 | CPU |
+|---|---|---|---|---|---|
+| Stocks | 实时数据、原生循环 | 120 | 3.2 ms | 0% | 35% |
+| Stocks，滚动中 | 实时数据、滚动 | 120 | 3.5 ms | 0% | 36% |
+| AI Chat，滚动中 | 滚动 | 120 | 2.4 ms | 1% | 5% |
+| Photos，滚动中 | 滚动 | 120 | 1.4 ms | 0% | 10% |
+| Lists，滚动中 | 滚动 | 120 | 1.6 ms | 0% | 8% |
+| Scrolling，滚动中 | 滚动 | 120 | 2.7 ms | 0% | 6% |
+| Navigation，滚动中 | 滚动 | 120 | 0.2 ms | 0% | 4% |
+| Form，滚动中 | 滚动 | 120 | 0.6 ms | 0% | 5% |
+| Resizable，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 4% |
+| Dock，滚动中 | 滚动 | 120 | 0.3 ms | 1% | 5% |
+| Gestures | 弹簧、脉动的圆环 | 120 | 0.4 ms | 0% | 4% |
+| Physics，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 4% |
+| Animations | 原生循环 | 120 | 0.3 ms | 0% | 5% |
+| Canvas，滚动中 | 滚动、原生循环 | 120 | 1.6 ms | 0% | 9% |
+| Styles，滚动中 | 滚动、摆动的变换 | 120 | 1.0 ms | 0% | 6% |
+| Tailwind | `animate-*` 工具类 | 120 | 0.5 ms | 0% | 4% |
+| Text，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 5% |
+| Text View，滚动中 | 滚动 | 120 | 0.7 ms | 0% | 5% |
+| Images，滚动中 | 滚动 | 120 | 0.4 ms | 0% | 5% |
+| Components，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 5% |
+| Overlays，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 4% |
+| Menus，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 5% |
+| Controls | 过渡 | 120 | 0.3 ms | 0% | 4% |
+| Web and video，滚动中 | 滚动 | 120 | 0.2 ms | 0% | 6% |
+| System | `requestAnimationFrame`、定时器 | 120 | 0.2 ms | 0% | 3% |
+| Standard APIs，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 5% |
+| Storage，滚动中 | 滚动 | 120 | 0.3 ms | 0% | 5% |
+
+</div>
+
+### 内存
+
+启动 3 秒后的静止内存（release 运行器）。*占用（footprint）*是 macOS 计入这个进程的内存（活动监视器显示的值）；*常驻内存*还包含系统共享库的页面：
+
+<div class="data-table">
+
+| 应用 | 窗口 | 占用 | 常驻内存（RSS） |
+|---|---|---|---|
+| Rust 应用（`nsh init --template rust`） | 1200 × 800 | ~19 MB | ~86 MB |
+| TSX 计数器（`examples/counter`） | 1200 × 800 | ~20 MB | ~89 MB |
+| 只有一个 label 的 AppKit 窗口，作为参照 | 480 × 640 | ~17 MB | ~80 MB |
+
+</div>
+
+浏览 gallery 的过程中，进程在 Canvas 页之前占用 84–230 MB，从 Text View 页起约 350–360 MB，增长的是它有意保留的缓存（解码后的图片，
+上限 128 MB；Text View 页的文档）以及首次使用时加载的框架（网页视图用的 WebKit）；Canvas 页的栅格在三个 canvas 都可见时最多约
+400 MB，离开页面即释放。
+
+### 应用体积
+
+用 `nsh init` 的每种模板生成的 hello world 应用，由 `nsh package --target macos` 为 Apple 芯片（arm64）构建，与 Linux 一样以链接时优化构建并去除符号；以及上面两个应用为 Apple 芯片发布的版本。
+可执行文件是 `.app` 里的运行器；zip 是压缩后的 `.app`（`ditto -c -k`）：
+
+<div class="data-table">
+
+| 应用 | 编写语言 | 可执行文件 | 压缩后的 `.app` |
+|---|---|---|---|
+| Hello world（`--template rust`） | Rust | 12.4 MB | 6.0 MB |
+| Hello world（`--template ts`） | TSX，运行在 QuickJS 上 | 19.8 MB | 9.5 MB |
+| Hello world（`--template mixed`） | TSX 加一个 Rust crate | 19.8 MB | 9.5 MB |
+| [sysmon](https://github.com/huacnlee/sysmon) 0.1.3 | Rust | 21.6 MB | 8.4 MB（它发布的 `.tar.gz`） |
+| [Omasend](https://github.com/huacnlee/omasend) 0.2.0 | Rust | 18.4 MB | 9.7 MB（它发布的 `.tar.gz`） |
+
+</div>
+
+这些数字来自：
+
+- **只为变化绘制帧**：display link 在原生动画运行时跳动，并随动画一起停止；动画随页面一起停止（视图删除时它的关键帧动画结束，循环在组件的 `cleanup` 中停止）。
+- **Canvas 在 Core Animation 的线程上绘制**：canvas 异步绘制（`drawsAsynchronously`），动画值变化时只重绘读取它的操作覆盖的区域。
+- **内容变化时才绘制**：文本和 canvas 绘制在各自的 layer 里，内容或尺寸变化时才重绘，移动或滚动时不重绘。
+
+## iOS（UIKit）
+
+测量环境：iOS 模拟器（iPhone 18 Pro Max，运行在上面那台 MacBook Pro 上），release 构建，与上面相同的浏览流程（`perf.py --target ios`：
+`nsh test --target ios --fps`，以 UIKit 收到的手指触摸操作）。模拟器以 60 Hz 呈现；在配有 ProMotion 屏幕的 iPhone 上，NSH 的 display link
+以屏幕的 120 Hz 运行（`nsh package` 构建的应用和开发宿主通过 `CADisableMinimumFrameDurationOnPhone` 请求它）。阶段是 *tick*（原生动画）、
+*drain*（应用引擎的批次）和 *scroll*（跟随滚动视图的工作：列表、吸顶单元格、绑定的值）。
+
+<div class="data-table">
+
+| 页面 | 帧的来源 | FPS | 帧 p95 | CPU |
+|---|---|---|---|---|
+| Home，滚动中 | 滚动 | 60 | 0.1 ms | 6% |
+| Stocks | 实时数据、原生循环 | 60 | 0.3 ms | 22% |
+| Stocks，滚动中 | 实时数据、滚动 | 60 | 0.3 ms | 25% |
+| Photos，滚动中 | 滚动 | 60 | 1.2 ms | 6% |
+| Lists，滚动中 | 滚动 | 60 | 1.1 ms | 8% |
+| Scrolling，滚动中 | 滚动 | 60 | 0.1 ms | 7% |
+| Navigation，滚动中 | 滚动 | 60 | 0.2 ms | 7% |
+| Form，滚动中 | 滚动 | 60 | 0.3 ms | 7% |
+| Gestures | 弹簧、脉动的圆环 | 60 | 0.3 ms | 3% |
+| Animations | 原生循环 | 60 | 0.7 ms | 6% |
+| Canvas | 原生循环 | 60 | 0.4 ms | 16% |
+| Styles | 摆动的变换 | 60 | 0.4 ms | 4% |
+| Tailwind，滚动中 | 滚动 | 60 | 0.2 ms | 7% |
+| Text，滚动中 | 滚动 | 60 | 0.1 ms | 7% |
+| Text View，滚动中 | 滚动 | 60 | 0.1 ms | 6% |
+| Images，滚动中 | 滚动 | 60 | 0.1 ms | 5% |
+| Components，滚动中 | 滚动 | 60 | 0.2 ms | 6% |
+| Overlays，滚动中 | 滚动 | 60 | 0.1 ms | 6% |
+| Menus，滚动中 | 滚动 | 60 | 0.2 ms | 7% |
+| Controls，滚动中 | 滚动、过渡 | 60 | 0.2 ms | 5% |
+| Web and video，滚动中 | 滚动 | 60 | 0.1 ms | 8% |
+| System | `requestAnimationFrame`、定时器 | 60 | 0.3 ms | 4% |
+| Standard APIs，滚动中 | 滚动 | 60 | 0.1 ms | 7% |
+| Storage，滚动中 | 滚动 | 60 | 0.1 ms | 8% |
+
+</div>
+
+*FPS* 与上面一样是有东西在动时的速率：达到模拟器的 60 时，每一帧都在上一帧之后的下一次刷新到来。没有任何东西在动的页面不绘制帧，
+静止时 CPU 为 1–2%。进程在 gallery 首页占用 40 MB，浏览完全部页面后约 180 MB（有意缓存的图片、Text View 页的文档）。
+
+## 测量应用
+
+用同样的方式测量一个应用，在 `--target linux`、`macos` 或 `ios` 上带上 `--fps` 和 `-v` 运行它的测试或步骤：
 
 ```sh
 cargo build --release -p nsh-cli
-python3 examples/gallery/tools/perf.py --only Stocks,Canvas     # gallery，逐页测量
-echo 'await app.wait(5000)' | nsh -v test App.tsx --target linux --fps   # 任意应用
+python3 examples/gallery/tools/perf.py --target macos --only Stocks,Canvas   # gallery，逐页测量
+echo 'await app.wait(5000)' | nsh -v test App.tsx --target linux --fps        # 任意应用
 ```
 
