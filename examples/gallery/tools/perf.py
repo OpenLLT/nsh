@@ -10,7 +10,8 @@ scenario and writes the readings as JSON:
     python3 examples/gallery/tools/perf.py [--nsh target/release/nsh] [--only Stocks,Canvas]
 
 Each scenario is measured for `--seconds` after a second of warm-up. `fps` is
-the frames drawn per second (0 for a page with nothing moving), `frame p95`
+the frames drawn per second (0 for a page with nothing moving), `moving` the
+rate while something moves (one frame per median gap between drawn frames), `frame p95`
 the main thread's time per drawn frame and `over` the share of frames longer
 than a 120 Hz refresh (8.3 ms); `cpu` is the process' (percent of one core).
 """
@@ -34,7 +35,7 @@ DEMOS = [
 ]
 
 LINE = re.compile(
-    r"fps (?P<fps>\d+)/(?P<hz>\d+) frame (?P<frame>[\d./]+) over (?P<over>\d+)% "
+    r"fps (?P<fps>\d+)/(?P<hz>\d+) frame (?P<frame>[\d./]+) gap (?P<gap>[\d./]+) over (?P<over>\d+)% "
     r"update (?P<update>[\d./]+) layout (?P<layout>[\d./]+) paint (?P<paint>[\d./]+) snapshot (?P<snapshot>[\d./]+) canvas (?P<canvas>[\d./]+) "
     r"drain (?P<drain>[\d./]+) commits (?P<commits>\d+) js (?P<js>[\d./]+) core (?P<core>[\d./]+) "
     r"items (?P<items>\d+) engine (?P<engine>\d+)% cpu (?P<cpu>[\d-]+)%? rss (?P<rss>[\d.]+) MB"
@@ -142,6 +143,8 @@ def main() -> int:
             continue
         fps = [int(l["fps"]) for l in lines]
         frame_p95 = [summary(l["frame"])[2] for l in lines if int(l["fps"]) > 0]
+        # While something moves: one frame per median gap between drawn frames.
+        gaps = [summary(l["gap"])[1] for l in lines if int(l["fps"]) > 0 and summary(l["gap"])[1] > 0]
         over = [int(l["over"]) for l in lines]
         cpu = [int(l["cpu"]) for l in lines if l["cpu"] != "-"]
         rss = [float(l["rss"]) for l in lines]
@@ -150,6 +153,7 @@ def main() -> int:
             "seconds": len(lines),
             "fps": statistics.median(fps),
             "fps_min": min(fps),
+            "moving_fps": min(1000 / statistics.median(gaps), float(lines[-1]["hz"])) if gaps else 0.0,
             "hz": int(lines[-1]["hz"]),
             "frame_p95": max(frame_p95) if frame_p95 else 0.0,
             "over": max(over),
@@ -165,10 +169,10 @@ def main() -> int:
                 for phase in ("update", "layout", "paint", "snapshot", "canvas")
             },
         })
-    print(f"{'scenario':<26}{'fps':>6}{'min':>5}{'frame p95':>11}{'over':>6}{'cpu':>7}{'max':>6}{'rss MB':>8}{'commits':>9}{'core p95':>10}{'js p95':>8}  update/layout/paint/snapshot/canvas")
+    print(f"{'scenario':<26}{'fps':>6}{'min':>5}{'moving':>8}{'frame p95':>11}{'over':>6}{'cpu':>7}{'max':>6}{'rss MB':>8}{'commits':>9}{'core p95':>10}{'js p95':>8}  update/layout/paint/snapshot/canvas")
     for r in rows:
         print(
-            f"{r['scenario']:<26}{r['fps']:>6.0f}{r['fps_min']:>5}{r['frame_p95']:>9.2f}ms{r['over']:>5}%"
+            f"{r['scenario']:<26}{r['fps']:>6.0f}{r['fps_min']:>5}{r['moving_fps']:>8.0f}{r['frame_p95']:>9.2f}ms{r['over']:>5}%"
             f"{r['cpu']:>6.0f}%{r['cpu_max']:>5}%{r['rss']:>8.1f}{r['commits']:>9.0f}{r['core_p95']:>8.2f}ms{r['js_p95']:>6.2f}ms"
             f"  {r['update']:.2f}/{r['layout']:.2f}/{r['paint']:.2f}/{r['snapshot']:.2f}/{r['canvas']:.2f}"
         )

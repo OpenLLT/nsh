@@ -2,11 +2,12 @@
 //! second, one `nsh::perf` line of what the surface's frames and commits
 //! cost, from its [`PerfMonitor`]:
 //!
-//! `fps 120/120 frame 1.21/1.10/2.40/3.90 over 0% update 0.10/… layout
+//! `fps 120/120 frame 1.21/1.10/2.40/3.90 gap 8.33/8.33/8.40/16.70 over 0% update 0.10/… layout
 //! 0.05/… paint 1.00/… snapshot 0.40/… canvas 0.10/… drain 0.20/0.15/0.60/0.90 commits 20
 //! js 0.30/… core 0.50/… items 42 engine 3% cpu 24% rss 92.4 MB`: frames GTK
 //! drew in the second over the display's rate, the main thread's time per
-//! drawn frame (GTK's frame clock from `before-paint` to `after-paint`) and
+//! drawn frame (GTK's frame clock from `before-paint` to `after-paint`), the
+//! gaps between drawn frames (one refresh while something moves) and
 //! its phases (`update`: tick callbacks, the native animations among them;
 //! `layout`: allocation; `paint`: snapshots and GSK's rendering, of which
 //! `snapshot` is NSH's views' and `canvas` the canvases' rasterizing in
@@ -210,11 +211,12 @@ fn after_paint(fps: &Fps, clock: &gdk::FrameClock) {
 fn line(s: &PerfSnapshot, phases: &[Stat; 5], drains: &Stat) -> String {
     let process = &s.process;
     format!(
-        "fps {:.0}/{:.0} frame {} over {:.0}% update {} layout {} paint {} snapshot {} canvas {} drain {} \
+        "fps {:.0}/{:.0} frame {} gap {} over {:.0}% update {} layout {} paint {} snapshot {} canvas {} drain {} \
          commits {:.0} js {} core {} items {:.0} engine {:.0}% cpu {} rss {}",
         s.fps,
         s.refresh_rate.unwrap_or(0.0),
         ms(&s.frame),
+        ms(&s.frame_interval),
         s.dropped * 100.0,
         ms(&phases[0]),
         ms(&phases[1]),
