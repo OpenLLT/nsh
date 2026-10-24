@@ -608,7 +608,6 @@ impl DamageScan {
     }
 }
 
-/// Whether `op` reads a changed value.
 /// The index of the first operation of `ops` that reads an animated value
 /// slot (`ops.len()` when none does). What the operations before it paint
 /// is the same whatever the slots hold: a platform may keep those pixels
@@ -657,6 +656,7 @@ pub fn first_animated(ops: &[CanvasOp]) -> usize {
         .unwrap_or(ops.len())
 }
 
+/// Whether `op` reads a changed value.
 fn path_op_dep(op: &PathOp, dep: &impl Fn(&Num) -> bool) -> bool {
     match op {
         PathOp::MoveTo(x, y) | PathOp::LineTo(x, y) => dep(x) || dep(y),
